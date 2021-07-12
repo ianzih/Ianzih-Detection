@@ -1,12 +1,6 @@
-<<<<<<< HEAD
-from keras import backend as K
-from keras.models import load_model
-from keras.preprocessing import image
-=======
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.models import load_model
 from tensorflow.python.keras.preprocessing import image
->>>>>>> test
 import sys
 import numpy as np
 
@@ -14,11 +8,7 @@ import numpy as np
 files = sys.argv[1:]
 
 # 載入訓練好的模型
-<<<<<<< HEAD
-net = load_model('model-resnet50-final.h5')
-=======
 net = load_model('model-resnet101-final.h5')
->>>>>>> test
 
 cls_list = ['cats', 'dogs']
 
