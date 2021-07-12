@@ -6,3 +6,5 @@
 mkdir logs    #save your model weight
 ```
 
+## pre-train use
+   * 點開ResNext-101 ， 查看第39、106行
