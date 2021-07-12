@@ -1,19 +1,17 @@
 from keras import backend as K
 from keras.models import Model
-from keras.layers import Flatten, Dense, Dropout
+from keras.layers import Flatten, Dense, Dropout ,BatchNormalization
 import keras
 from keras_applications.resnext import ResNeXt101
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
-from resnext import ResNextImageNet
 import tensorflow as tf
-
 import os
-
+from sklearn.model_selection import train_test_split
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # 資料路徑
-DATASET_PATH = 'sample'
+DATASET_PATH = 'train_img'
 
 # 影像大小
 IMAGE_SIZE = (224, 224)
@@ -28,14 +26,17 @@ BATCH_SIZE = 8
 FREEZE_LAYERS = 2
 
 # Epoch 數
-NUM_EPOCHS = 5
+NUM_EPOCHS = 50
 
-Learning_rate = 0.0001
+Learning_rate = 0.00005
+
+
+STEP_EACH_EPOCH = 250 #train_batches.samples // BATCH_SIZE
 
 # 模型輸出儲存的檔案
-WEIGHTS_FINAL = 'model-resnext-final.h5'
-WEIGHTS_FINAL_All = 'model-resnext-final-all.h5'
+WEIGHTS_FINAL = './logs/model-resnext101-final.h5'
 
+# WEIGHTS = './logs/resnext101-071100.h5'  # pre-train use
 
 # 透過 data augmentation 產生訓練與驗證用的影像資料
 train_datagen = ImageDataGenerator(rotation_range=40,
@@ -45,36 +46,38 @@ train_datagen = ImageDataGenerator(rotation_range=40,
                                    zoom_range=0.2,
                                    channel_shift_range=10,
                                    horizontal_flip=True,
-                                   fill_mode='nearest')
+                                   fill_mode='nearest',
+                                   validation_split=0.3)
+                                   
+valid_datagen = ImageDataGenerator(validation_split=0.3)
+
 train_batches = train_datagen.flow_from_directory(DATASET_PATH + '/train',
                                                   target_size=IMAGE_SIZE,
                                                   interpolation='bicubic',
                                                   class_mode='categorical',
                                                   shuffle=True,
-                                                  batch_size=BATCH_SIZE)
+                                                  batch_size=BATCH_SIZE,
+                                                  subset="training")
 
-valid_datagen = ImageDataGenerator()
-valid_batches = valid_datagen.flow_from_directory(DATASET_PATH + '/valid',
+valid_batches = valid_datagen.flow_from_directory(DATASET_PATH + '/train',
                                                   target_size=IMAGE_SIZE,
                                                   interpolation='bicubic',
                                                   class_mode='categorical',
                                                   shuffle=False,
-                                                  batch_size=BATCH_SIZE)
+                                                  batch_size=BATCH_SIZE,
+                                                  subset="validation")
 
 # 輸出各類別的索引值
 for cls, idx in train_batches.class_indices.items():
     print('Class #{} = {}'.format(idx, cls))
 
-# 以訓練好的 ResNet50 為基礎來建立模型，
-# 捨棄 ResNet50 頂層的 fully connected layers
-#net = ResNet50(include_top=False, weights='imagenet', input_tensor=None,input_shape=(IMAGE_SIZE[0],IMAGE_SIZE[1],3))
-net = ResNeXt101(include_top=False, weights='imagenet', input_tensor=None, input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3),
+# 以訓練好的 ResNeXt101 為基礎來建立模型，
+# 捨棄 ResNeXt101 頂層的 fully connected layers
+net = ResNeXt101(include_top=False, weights= "imagenet", input_tensor=None, input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3),
                  backend=keras.backend,
                  layers=keras.layers,
                  models=keras.models,
                  utils=keras.utils)
-#net = ResNextImageNet(input_shape=(IMAGE_SIZE[0],IMAGE_SIZE[1],3) , weights = 'imagenet')
-
 
 
 x = net.output
@@ -82,7 +85,8 @@ x = net.output
 x = Flatten()(x)
 
 # 增加 DropOut layer
-x = Dropout(0.5)(x)
+#x = Dropout(0.5)(x)
+x = BatchNormalization()(x)
 
 # 增加 Dense layer，以 softmax 產生個類別的機率值
 output_layer = Dense(NUM_CLASSES, activation='softmax', name='softmax')(x)
@@ -91,14 +95,16 @@ output_layer = Dense(NUM_CLASSES, activation='softmax', name='softmax')(x)
 
 net_final = Model(inputs=net.input, outputs=output_layer)
 
-
+"""
 for layer in net_final.layers[:FREEZE_LAYERS]:
     layer.trainable = False
-    print(layer)
-"""
+    
+
 for layer in net_final.layers[FREEZE_LAYERS:]:
     layer.trainable = True
 """
+#net_final.load_weights(WEIGHTS) #pre-train use ，上面的權重要改成 "None"
+
 # 使用 Adam optimizer，以較低的 learning rate 進行 fine-tuning
 net_final.compile(optimizer=Adam(lr=Learning_rate),
                   loss='categorical_crossentropy', metrics=['accuracy'])
@@ -108,9 +114,9 @@ print(net_final.summary())
 
 # 訓練模型
 net_final.fit_generator(train_batches,
-                        steps_per_epoch=train_batches.samples // BATCH_SIZE,
+                        steps_per_epoch=STEP_EACH_EPOCH,
                         validation_data=valid_batches,
-                        validation_steps=valid_batches.samples // BATCH_SIZE,
+                        validation_steps = 100, #valid_batches.samples // BATCH_SIZE,
                         epochs=NUM_EPOCHS)
 
 # 儲存訓練好的模型

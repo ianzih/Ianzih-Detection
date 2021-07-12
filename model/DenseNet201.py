@@ -36,22 +36,26 @@ train_datagen = ImageDataGenerator(rotation_range=40,
                                    zoom_range=0.2,
                                    channel_shift_range=10,
                                    horizontal_flip=True,
-                                   fill_mode='nearest')
+                                   fill_mode='nearest',
+                                   validation_split=0.3)
+                                   
+valid_datagen = ImageDataGenerator(validation_split=0.3)
+
 train_batches = train_datagen.flow_from_directory(DATASET_PATH + '/train',
                                                   target_size=IMAGE_SIZE,
                                                   interpolation='bicubic',
                                                   class_mode='categorical',
                                                   shuffle=True,
-                                                  batch_size=BATCH_SIZE)
+                                                  batch_size=BATCH_SIZE,
+                                                  subset="training")
 
-valid_datagen = ImageDataGenerator()
-valid_batches = valid_datagen.flow_from_directory(DATASET_PATH + '/valid',
+valid_batches = valid_datagen.flow_from_directory(DATASET_PATH + '/train',
                                                   target_size=IMAGE_SIZE,
                                                   interpolation='bicubic',
                                                   class_mode='categorical',
                                                   shuffle=False,
-                                                  batch_size=BATCH_SIZE)
-
+                                                  batch_size=BATCH_SIZE,
+                                                  subset="validation")
 # 輸出各類別的索引值
 for cls, idx in train_batches.class_indices.items():
     print('Class #{} = {}'.format(idx, cls))
