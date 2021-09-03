@@ -1,15 +1,15 @@
 from keras import backend as K
 from keras.models import Model
-from keras.layers import Flatten, Dense, Dropout
+from keras.layers import Flatten, Dense, Dropout,BatchNormalization, GlobalAveragePooling2D
 import keras
 from keras_applications.resnext import ResNeXt50
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
 import tensorflow as tf
 import os
+import matplotlib.pyplot as plt
 
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # 資料路徑
 DATASET_PATH = 'train_img'
 
@@ -17,23 +17,24 @@ DATASET_PATH = 'train_img'
 IMAGE_SIZE = (224, 224)
 
 # 影像類別數
-NUM_CLASSES = 2
+NUM_CLASSES = 4
 
 # 若 GPU 記憶體不足，可調降 batch size 或凍結更多層網路
-BATCH_SIZE = 8
+BATCH_SIZE = 32
 
 # 凍結網路層數
-FREEZE_LAYERS = 2
+FREEZE_LAYERS = 5
 
 # Epoch 數
-NUM_EPOCHS = 50
+NUM_EPOCHS = 70
 
-Learning_rate = 0.0001
+Learning_rate = 0.000001
+
 
 STEP_EACH_EPOCH = 250 #train_batches.samples // BATCH_SIZE
 
 # 模型輸出儲存的檔案
-WEIGHTS_FINAL = './logs/model-resnext50-final.h5'
+WEIGHTS_FINAL = './logs/model-resnext50-final'+str(Learning_rate)+'.h5'
 
 
 
@@ -43,14 +44,15 @@ train_datagen = ImageDataGenerator(rotation_range=40,
                                    height_shift_range=0.2,
                                    shear_range=0.2,
                                    zoom_range=0.2,
-                                   channel_shift_range=10,
-                                   horizontal_flip=True,
-                                   fill_mode='nearest',
-                                   validation_split=0.3)
+                                   # channel_shift_range=10,
+                                   vertical_flip=True,
+                                   fill_mode='constant',
+                                   validation_split=0.3
+                                   )
                                    
 valid_datagen = ImageDataGenerator(validation_split=0.3)
 
-train_batches = train_datagen.flow_from_directory(DATASET_PATH + '/train',
+train_batches = train_datagen.flow_from_directory(DATASET_PATH ,
                                                   target_size=IMAGE_SIZE,
                                                   interpolation='bicubic',
                                                   class_mode='categorical',
@@ -58,11 +60,11 @@ train_batches = train_datagen.flow_from_directory(DATASET_PATH + '/train',
                                                   batch_size=BATCH_SIZE,
                                                   subset="training")
 
-valid_batches = valid_datagen.flow_from_directory(DATASET_PATH + '/train',
+valid_batches = valid_datagen.flow_from_directory(DATASET_PATH ,
                                                   target_size=IMAGE_SIZE,
                                                   interpolation='bicubic',
                                                   class_mode='categorical',
-                                                  shuffle=False,
+                                                  shuffle=True,
                                                   batch_size=BATCH_SIZE,
                                                   subset="validation")
 
@@ -72,7 +74,7 @@ for cls, idx in train_batches.class_indices.items():
 
 # 以訓練好的 ResNeXt101 為基礎來建立模型，
 # 捨棄 ResNeXt101 頂層的 fully connected layers
-net = ResNeXt50(include_top=False, weights='imagenet', input_tensor=None, input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3),
+net = ResNeXt50(include_top=False, weights = 'imagenet', input_tensor=None, input_shape=(IMAGE_SIZE[0], IMAGE_SIZE[1], 3),
                  backend=keras.backend,
                  layers=keras.layers,
                  models=keras.models,
@@ -81,10 +83,11 @@ net = ResNeXt50(include_top=False, weights='imagenet', input_tensor=None, input_
 
 x = net.output
 
-x = Flatten()(x)
-
+#x = Flatten()(x)
+x = GlobalAveragePooling2D(name='pool1')(x)
 # 增加 DropOut layer
 #x = Dropout(0.5)(x)
+#x = BatchNormalization()(x)
 
 # 增加 Dense layer，以 softmax 產生個類別的機率值
 output_layer = Dense(NUM_CLASSES, activation='softmax', name='softmax')(x)
@@ -106,14 +109,24 @@ net_final.compile(optimizer=Adam(lr=Learning_rate),
                   loss='categorical_crossentropy', metrics=['accuracy'])
 
 # 輸出整個網路結構
-print(net_final.summary())
+#print(net_final.summary())
 
 # 訓練模型
 net_final.fit_generator(train_batches,
                         steps_per_epoch=STEP_EACH_EPOCH,
                         validation_data=valid_batches,
-                        validation_steps=valid_batches.samples // BATCH_SIZE,
+                        validation_steps = 250,
                         epochs=NUM_EPOCHS)
 
 # 儲存訓練好的模型
 net_final.save(WEIGHTS_FINAL)
+
+
+plt.figure()
+plt.plot(net_final.history.history['loss'])
+plt.plot(net_final.history.history['val_loss'])
+plt.title('Traing and Validation loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.savefig('./model_resnext50_loss'+str(Learning_rate)+'.jpg')
